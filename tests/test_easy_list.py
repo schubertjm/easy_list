@@ -60,6 +60,10 @@ class EasyListTests(unittest.TestCase):
         with self.assertRaises(EasyListError):
             search_by_image("token", "encoded-image", "EBAY_US", 0)
 
+    def test_search_by_image_rejects_non_numeric_limit(self):
+        with self.assertRaises(EasyListError):
+            search_by_image("token", "encoded-image", "EBAY_US", "abc")
+
     def test_calculate_target_price_reduces_price(self):
         self.assertEqual(calculate_target_price("100.00", 15), 85.0)
 

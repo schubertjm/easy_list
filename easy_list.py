@@ -118,6 +118,16 @@ def _safe_error_summary(exc: error.HTTPError, fallback_message: str) -> str:
     return fallback_message
 
 
+def _normalize_limit(limit: int | str) -> int:
+    try:
+        normalized_limit = int(limit)
+    except (TypeError, ValueError) as exc:
+        raise EasyListError("eBay result_limit must be a positive integer.") from exc
+    if normalized_limit < 1:
+        raise EasyListError("eBay result_limit must be a positive integer.")
+    return normalized_limit
+
+
 def get_access_token(client_id: str, client_secret: str, scope: str) -> str:
     token_url = "https://api.ebay.com/identity/v1/oauth2/token"
     credentials = f"{client_id}:{client_secret}".encode("utf-8")
@@ -137,6 +147,8 @@ def get_access_token(client_id: str, client_secret: str, scope: str) -> str:
             token_response = _read_json_response(response)
     except error.HTTPError as exc:
         raise EasyListError(_safe_error_summary(exc, "Unable to get an eBay access token")) from exc
+    except error.URLError as exc:
+        raise EasyListError(f"Unable to get an eBay access token: {exc.reason}") from exc
 
     access_token = token_response.get("access_token", "")
     if not access_token:
@@ -145,9 +157,7 @@ def get_access_token(client_id: str, client_secret: str, scope: str) -> str:
 
 
 def search_by_image(access_token: str, image_base64: str, marketplace_id: str, limit: int) -> dict[str, Any]:
-    normalized_limit = int(limit)
-    if normalized_limit < 1:
-        raise EasyListError("eBay result_limit must be a positive integer.")
+    normalized_limit = _normalize_limit(limit)
     query_string = parse.urlencode({"limit": normalized_limit})
     search_url = f"https://api.ebay.com/buy/browse/v1/item_summary/search_by_image?{query_string}"
     search_request = request.Request(
@@ -165,6 +175,8 @@ def search_by_image(access_token: str, image_base64: str, marketplace_id: str, l
             return _read_json_response(response)
     except error.HTTPError as exc:
         raise EasyListError(_safe_error_summary(exc, "eBay image search failed")) from exc
+    except error.URLError as exc:
+        raise EasyListError(f"eBay image search failed: {exc.reason}") from exc
 
 
 def simplify_items(search_results: dict[str, Any]) -> list[dict[str, Any]]:
