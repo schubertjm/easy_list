@@ -13,6 +13,7 @@ from easy_list import (
     build_listing_plan,
     calculate_target_price,
     choose_search_image,
+    encode_image,
     get_access_token,
     load_config,
     resolve_credentials,
@@ -29,6 +30,18 @@ class EasyListTests(unittest.TestCase):
 
             with self.assertRaises(EasyListError):
                 load_config(config_path)
+
+    def test_load_config_requires_object_root(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            config_path = Path(tmp) / "config.json"
+            config_path.write_text('["not-an-object"]', encoding="utf-8")
+
+            with self.assertRaises(EasyListError):
+                load_config(config_path)
+
+    def test_load_config_wraps_missing_file(self):
+        with self.assertRaises(EasyListError):
+            load_config(Path("missing-config.json"))
 
     def test_resolve_credentials_prefers_environment_variables(self):
         config = json.loads(json.dumps(DEFAULT_CONFIG))
@@ -120,8 +133,18 @@ class EasyListTests(unittest.TestCase):
 
         self.assertIn("eBay image search failed: offline", str(ctx.exception))
 
+    def test_encode_image_wraps_read_failures(self):
+        image_path = Path("broken.jpg")
+
+        with patch.object(Path, "read_bytes", side_effect=OSError("denied")):
+            with self.assertRaises(EasyListError):
+                encode_image(image_path)
+
     def test_calculate_target_price_reduces_price(self):
         self.assertEqual(calculate_target_price("100.00", 15), 85.0)
+
+    def test_calculate_target_price_returns_none_for_invalid_numbers(self):
+        self.assertIsNone(calculate_target_price("not-a-number", 15))
 
     def test_choose_search_image_prefers_named_file(self):
         with tempfile.TemporaryDirectory() as tmp:

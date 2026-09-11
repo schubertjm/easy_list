@@ -51,8 +51,12 @@ def load_config(config_path: Path) -> dict[str, Any]:
     try:
         with config_path.open("r", encoding="utf-8") as handle:
             loaded = json.load(handle)
+    except OSError as exc:
+        raise EasyListError(f"Unable to read config file: {config_path}") from exc
     except json.JSONDecodeError as exc:
         raise EasyListError(f"Invalid JSON config file: {config_path}") from exc
+    if not isinstance(loaded, dict):
+        raise EasyListError(f"Config file must contain a JSON object: {config_path}")
     return deep_merge(DEFAULT_CONFIG, loaded)
 
 
@@ -88,7 +92,10 @@ def choose_search_image(images: list[Path], preferred_name: str = "") -> Path:
 
 
 def encode_image(image_path: Path) -> str:
-    return base64.b64encode(image_path.read_bytes()).decode("ascii")
+    try:
+        return base64.b64encode(image_path.read_bytes()).decode("ascii")
+    except OSError as exc:
+        raise EasyListError(f"Unable to read image file: {image_path}") from exc
 
 
 def resolve_credentials(config: dict[str, Any]) -> tuple[str, str]:
@@ -204,7 +211,11 @@ def simplify_items(search_results: dict[str, Any]) -> list[dict[str, Any]]:
 def calculate_target_price(price_value: str | float | int | None, percentage_less: float) -> float | None:
     if price_value in (None, ""):
         return None
-    return round(float(price_value) * (1 - (percentage_less / 100.0)), 2)
+    try:
+        price_number = float(price_value)
+    except (TypeError, ValueError):
+        return None
+    return round(price_number * (1 - (percentage_less / 100.0)), 2)
 
 
 def build_listing_plan(
