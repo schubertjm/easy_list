@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from easy_list import build_listing_plan, calculate_target_price, choose_search_image, load_config, run
+from easy_list import DEFAULT_CONFIG, build_listing_plan, calculate_target_price, choose_search_image, run
 
 
 class EasyListTests(unittest.TestCase):
@@ -43,7 +43,7 @@ class EasyListTests(unittest.TestCase):
             self.assertEqual(len(report["items"][0]["listing_images"]), 1)
 
     def test_build_listing_plan_uses_first_match_for_price_guidance(self):
-        config = load_config(Path("/home/runner/work/easy_list/easy_list/config.json"))
+        config = json.loads(json.dumps(DEFAULT_CONFIG))
         plan = build_listing_plan(
             item_folder=Path("camera"),
             listing_images=[Path("camera/front.jpg")],
