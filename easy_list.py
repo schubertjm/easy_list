@@ -60,6 +60,16 @@ def load_config(config_path: Path) -> dict[str, Any]:
     return deep_merge(DEFAULT_CONFIG, loaded)
 
 
+def resolve_pictures_dir(config_path: Path, configured_directory: str) -> Path:
+    base_dir = config_path.parent.resolve()
+    pictures_dir = (base_dir / configured_directory).resolve()
+    try:
+        pictures_dir.relative_to(base_dir)
+    except ValueError as exc:
+        raise EasyListError("Pictures directory must stay within the config file directory.") from exc
+    return pictures_dir
+
+
 def list_picture_sets(pictures_dir: Path) -> list[Path]:
     if not pictures_dir.exists():
         raise EasyListError(f"Pictures directory does not exist: {pictures_dir}")
@@ -218,6 +228,16 @@ def calculate_target_price(price_value: str | float | int | None, percentage_les
     return round(price_number * (1 - (percentage_less / 100.0)), 2)
 
 
+def normalize_percentage_less(value: float | int | str) -> float:
+    try:
+        percentage_less = float(value)
+    except (TypeError, ValueError) as exc:
+        raise EasyListError("listing.percentage_less must be a number between 0 and 100.") from exc
+    if not 0 <= percentage_less <= 100:
+        raise EasyListError("listing.percentage_less must be between 0 and 100.")
+    return percentage_less
+
+
 def build_listing_plan(
     item_folder: Path,
     listing_images: list[Path],
@@ -226,7 +246,7 @@ def build_listing_plan(
     config: dict[str, Any],
 ) -> dict[str, Any]:
     listing_config = config["listing"]
-    percentage_less = float(listing_config["percentage_less"])
+    percentage_less = normalize_percentage_less(listing_config["percentage_less"])
     closest_match = matches[0] if matches else None
     suggested_price = None
     if closest_match:
@@ -254,7 +274,7 @@ def build_listing_plan(
 
 def run(config_path: Path, dry_run: bool = False) -> dict[str, Any]:
     config = load_config(config_path)
-    pictures_dir = (config_path.parent / config["pictures"]["directory"]).resolve()
+    pictures_dir = resolve_pictures_dir(config_path, config["pictures"]["directory"])
     preferred_name = config["pictures"].get("search_image_name", "")
     picture_sets = list_picture_sets(pictures_dir)
 
@@ -317,11 +337,13 @@ def main() -> int:
 
     try:
         report = run(config_path, dry_run=args.dry_run)
+        output_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
     except EasyListError as exc:
         print(f"Error: {exc}", file=os.sys.stderr)
         return 1
-
-    output_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
+    except OSError as exc:
+        print(f"Error: Unable to write output file: {output_path}", file=os.sys.stderr)
+        return 1
     print(f"Wrote {len(report['items'])} item plan(s) to {output_path}")
     return 0
 

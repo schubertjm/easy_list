@@ -43,6 +43,24 @@ class EasyListTests(unittest.TestCase):
         with self.assertRaises(EasyListError):
             load_config(Path("missing-config.json"))
 
+    def test_run_dry_run_fails_when_pictures_directory_is_missing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            config_path = Path(tmp) / "config.json"
+            config_path.write_text(json.dumps({"pictures": {"directory": "pictures"}}), encoding="utf-8")
+
+            with self.assertRaises(EasyListError):
+                run(config_path, dry_run=True)
+
+    def test_run_dry_run_fails_when_no_item_subfolders_exist(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "pictures").mkdir()
+            config_path = root / "config.json"
+            config_path.write_text(json.dumps({"pictures": {"directory": "pictures"}}), encoding="utf-8")
+
+            with self.assertRaises(EasyListError):
+                run(config_path, dry_run=True)
+
     def test_resolve_credentials_prefers_environment_variables(self):
         config = json.loads(json.dumps(DEFAULT_CONFIG))
         config["ebay"]["client_id"] = "config-id"
@@ -198,6 +216,20 @@ class EasyListTests(unittest.TestCase):
 
         self.assertEqual(plan["recommended_listing"]["suggested_price"], 45.0)
         self.assertEqual(plan["recommended_listing"]["sell_one_like_this_hint"], "https://www.ebay.com/itm/123")
+
+    def test_build_listing_plan_without_matches_uses_listing_defaults(self):
+        config = json.loads(json.dumps(DEFAULT_CONFIG))
+        plan = build_listing_plan(
+            item_folder=Path("camera"),
+            listing_images=[Path("camera/front.jpg")],
+            search_image=Path("camera/front.jpg"),
+            matches=[],
+            config=config,
+        )
+
+        self.assertIsNone(plan["closest_match"])
+        self.assertIsNone(plan["recommended_listing"]["suggested_price"])
+        self.assertEqual(plan["recommended_listing"]["currency"], "USD")
 
 
 if __name__ == "__main__":
