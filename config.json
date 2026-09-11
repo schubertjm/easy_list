@@ -1,0 +1,19 @@
+{
+  "ebay": {
+    "client_id": "",
+    "client_secret": "",
+    "scope": "https://api.ebay.com/oauth/api_scope",
+    "marketplace_id": "EBAY_US",
+    "result_limit": 5
+  },
+  "listing": {
+    "percentage_less": 10,
+    "shipping_type": "calculated",
+    "weight_lbs": 1.0,
+    "shipping_instructions": "Use the shipping details provided by the user before publishing."
+  },
+  "pictures": {
+    "directory": "pictures",
+    "search_image_name": ""
+  }
+}
