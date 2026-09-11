@@ -1,9 +1,11 @@
 import json
+from io import BytesIO
 import os
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
+from urllib import error
 
 from easy_list import (
     DEFAULT_CONFIG,
@@ -11,6 +13,8 @@ from easy_list import (
     build_listing_plan,
     calculate_target_price,
     choose_search_image,
+    get_access_token,
+    load_config,
     resolve_credentials,
     run,
     search_by_image,
@@ -18,6 +22,14 @@ from easy_list import (
 
 
 class EasyListTests(unittest.TestCase):
+    def test_load_config_rejects_invalid_json(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            config_path = Path(tmp) / "config.json"
+            config_path.write_text("{invalid", encoding="utf-8")
+
+            with self.assertRaises(EasyListError):
+                load_config(config_path)
+
     def test_resolve_credentials_prefers_environment_variables(self):
         config = json.loads(json.dumps(DEFAULT_CONFIG))
         config["ebay"]["client_id"] = "config-id"
@@ -63,6 +75,50 @@ class EasyListTests(unittest.TestCase):
     def test_search_by_image_rejects_non_numeric_limit(self):
         with self.assertRaises(EasyListError):
             search_by_image("token", "encoded-image", "EBAY_US", "abc")
+
+    def test_get_access_token_wraps_http_errors(self):
+        http_error = error.HTTPError(
+            url="https://api.ebay.com/identity/v1/oauth2/token",
+            code=400,
+            msg="Bad Request",
+            hdrs=None,
+            fp=BytesIO(b'{"error_description":"bad credentials"}'),
+        )
+
+        with patch("easy_list.request.urlopen", side_effect=http_error):
+            with self.assertRaises(EasyListError) as ctx:
+                get_access_token("client", "secret", "scope")
+
+        self.assertIn("Unable to get an eBay access token: bad credentials", str(ctx.exception))
+
+    def test_get_access_token_wraps_url_errors(self):
+        with patch("easy_list.request.urlopen", side_effect=error.URLError("offline")):
+            with self.assertRaises(EasyListError) as ctx:
+                get_access_token("client", "secret", "scope")
+
+        self.assertIn("Unable to get an eBay access token: offline", str(ctx.exception))
+
+    def test_search_by_image_wraps_http_errors(self):
+        http_error = error.HTTPError(
+            url="https://api.ebay.com/buy/browse/v1/item_summary/search_by_image",
+            code=500,
+            msg="Server Error",
+            hdrs=None,
+            fp=BytesIO(b'{"message":"temporary failure"}'),
+        )
+
+        with patch("easy_list.request.urlopen", side_effect=http_error):
+            with self.assertRaises(EasyListError) as ctx:
+                search_by_image("token", "encoded-image", "EBAY_US", 5)
+
+        self.assertIn("eBay image search failed: temporary failure", str(ctx.exception))
+
+    def test_search_by_image_wraps_url_errors(self):
+        with patch("easy_list.request.urlopen", side_effect=error.URLError("offline")):
+            with self.assertRaises(EasyListError) as ctx:
+                search_by_image("token", "encoded-image", "EBAY_US", 5)
+
+        self.assertIn("eBay image search failed: offline", str(ctx.exception))
 
     def test_calculate_target_price_reduces_price(self):
         self.assertEqual(calculate_target_price("100.00", 15), 85.0)

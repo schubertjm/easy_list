@@ -48,8 +48,11 @@ def deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]
 
 
 def load_config(config_path: Path) -> dict[str, Any]:
-    with config_path.open("r", encoding="utf-8") as handle:
-        loaded = json.load(handle)
+    try:
+        with config_path.open("r", encoding="utf-8") as handle:
+            loaded = json.load(handle)
+    except json.JSONDecodeError as exc:
+        raise EasyListError(f"Invalid JSON config file: {config_path}") from exc
     return deep_merge(DEFAULT_CONFIG, loaded)
 
 
@@ -270,7 +273,7 @@ def run(config_path: Path, dry_run: bool = False) -> dict[str, Any]:
             access_token=access_token,
             image_base64=encode_image(search_image),
             marketplace_id=config["ebay"]["marketplace_id"],
-            limit=int(config["ebay"]["result_limit"]),
+            limit=config["ebay"]["result_limit"],
         )
         results.append(build_listing_plan(folder, images, search_image, simplify_items(search_results), config))
 
@@ -304,7 +307,7 @@ def main() -> int:
     try:
         report = run(config_path, dry_run=args.dry_run)
     except EasyListError as exc:
-        print(f"Error: {exc}")
+        print(f"Error: {exc}", file=os.sys.stderr)
         return 1
 
     output_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
