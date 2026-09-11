@@ -2,11 +2,42 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
-from easy_list import DEFAULT_CONFIG, build_listing_plan, calculate_target_price, choose_search_image, run
+from easy_list import (
+    DEFAULT_CONFIG,
+    build_listing_plan,
+    calculate_target_price,
+    choose_search_image,
+    run,
+    search_by_image,
+)
 
 
 class EasyListTests(unittest.TestCase):
+    def test_search_by_image_normalizes_and_encodes_limit(self):
+        class FakeResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def read(self):
+                return b'{"itemSummaries": []}'
+
+        captured = {}
+
+        def fake_urlopen(req):
+            captured["url"] = req.full_url
+            return FakeResponse()
+
+        with patch("easy_list.request.urlopen", side_effect=fake_urlopen):
+            result = search_by_image("token", "encoded-image", "EBAY_US", "5")
+
+        self.assertEqual(result["itemSummaries"], [])
+        self.assertTrue(captured["url"].endswith("?limit=5"))
+
     def test_calculate_target_price_reduces_price(self):
         self.assertEqual(calculate_target_price("100.00", 15), 85.0)
 

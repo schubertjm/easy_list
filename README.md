@@ -20,3 +20,11 @@ Python helper to search eBay by image for user-provided item photos, then prepar
    ```
 
 The generated report includes the closest returned listing, a suggested lower price based on `percentage_less`, and the configured shipping instructions.
+
+Each item entry in `search_results.json` includes:
+- `item_folder` - the item sub-folder that was processed
+- `search_image` - the image used for the eBay image search
+- `listing_images` - all images found for the listing
+- `closest_match` - the top returned eBay match
+- `matches` - the returned similar listings
+- `recommended_listing` - the lower target price plus shipping settings and the selected match URL

@@ -132,7 +132,9 @@ def get_access_token(client_id: str, client_secret: str, scope: str) -> str:
 
 
 def search_by_image(access_token: str, image_base64: str, marketplace_id: str, limit: int) -> dict[str, Any]:
-    search_url = f"https://api.ebay.com/buy/browse/v1/item_summary/search_by_image?limit={limit}"
+    normalized_limit = int(limit)
+    query_string = parse.urlencode({"limit": normalized_limit})
+    search_url = f"https://api.ebay.com/buy/browse/v1/item_summary/search_by_image?{query_string}"
     search_request = request.Request(
         search_url,
         data=json.dumps({"image": image_base64}).encode("utf-8"),
