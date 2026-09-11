@@ -1,4 +1,5 @@
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -6,15 +7,32 @@ from unittest.mock import patch
 
 from easy_list import (
     DEFAULT_CONFIG,
+    EasyListError,
     build_listing_plan,
     calculate_target_price,
     choose_search_image,
+    resolve_credentials,
     run,
     search_by_image,
 )
 
 
 class EasyListTests(unittest.TestCase):
+    def test_resolve_credentials_prefers_environment_variables(self):
+        config = json.loads(json.dumps(DEFAULT_CONFIG))
+        config["ebay"]["client_id"] = "config-id"
+        config["ebay"]["client_secret"] = "config-secret"
+
+        with patch.dict(os.environ, {"EBAY_CLIENT_ID": "env-id", "EBAY_CLIENT_SECRET": "env-secret"}, clear=False):
+            self.assertEqual(resolve_credentials(config), ("env-id", "env-secret"))
+
+    def test_resolve_credentials_requires_values(self):
+        config = json.loads(json.dumps(DEFAULT_CONFIG))
+
+        with patch.dict(os.environ, {"EBAY_CLIENT_ID": "", "EBAY_CLIENT_SECRET": ""}, clear=False):
+            with self.assertRaises(EasyListError):
+                resolve_credentials(config)
+
     def test_search_by_image_normalizes_and_encodes_limit(self):
         class FakeResponse:
             def __enter__(self):
@@ -37,6 +55,10 @@ class EasyListTests(unittest.TestCase):
 
         self.assertEqual(result["itemSummaries"], [])
         self.assertTrue(captured["url"].endswith("?limit=5"))
+
+    def test_search_by_image_rejects_non_positive_limit(self):
+        with self.assertRaises(EasyListError):
+            search_by_image("token", "encoded-image", "EBAY_US", 0)
 
     def test_calculate_target_price_reduces_price(self):
         self.assertEqual(calculate_target_price("100.00", 15), 85.0)

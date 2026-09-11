@@ -104,6 +104,20 @@ def _read_json_response(response: Any) -> dict[str, Any]:
     return json.loads(payload) if payload else {}
 
 
+def _safe_error_summary(exc: error.HTTPError, fallback_message: str) -> str:
+    details = exc.read().decode("utf-8", errors="replace")
+    if details:
+        try:
+            payload = json.loads(details)
+        except json.JSONDecodeError:
+            payload = {}
+        if isinstance(payload, dict):
+            summary = payload.get("error_description") or payload.get("message") or payload.get("error")
+            if summary:
+                return f"{fallback_message}: {summary}"
+    return fallback_message
+
+
 def get_access_token(client_id: str, client_secret: str, scope: str) -> str:
     token_url = "https://api.ebay.com/identity/v1/oauth2/token"
     credentials = f"{client_id}:{client_secret}".encode("utf-8")
@@ -122,8 +136,7 @@ def get_access_token(client_id: str, client_secret: str, scope: str) -> str:
         with request.urlopen(token_request) as response:
             token_response = _read_json_response(response)
     except error.HTTPError as exc:
-        details = exc.read().decode("utf-8", errors="replace")
-        raise EasyListError(f"Unable to get an eBay access token: {details}") from exc
+        raise EasyListError(_safe_error_summary(exc, "Unable to get an eBay access token")) from exc
 
     access_token = token_response.get("access_token", "")
     if not access_token:
@@ -133,6 +146,8 @@ def get_access_token(client_id: str, client_secret: str, scope: str) -> str:
 
 def search_by_image(access_token: str, image_base64: str, marketplace_id: str, limit: int) -> dict[str, Any]:
     normalized_limit = int(limit)
+    if normalized_limit < 1:
+        raise EasyListError("eBay result_limit must be a positive integer.")
     query_string = parse.urlencode({"limit": normalized_limit})
     search_url = f"https://api.ebay.com/buy/browse/v1/item_summary/search_by_image?{query_string}"
     search_request = request.Request(
@@ -149,8 +164,7 @@ def search_by_image(access_token: str, image_base64: str, marketplace_id: str, l
         with request.urlopen(search_request) as response:
             return _read_json_response(response)
     except error.HTTPError as exc:
-        details = exc.read().decode("utf-8", errors="replace")
-        raise EasyListError(f"eBay image search failed: {details}") from exc
+        raise EasyListError(_safe_error_summary(exc, "eBay image search failed")) from exc
 
 
 def simplify_items(search_results: dict[str, Any]) -> list[dict[str, Any]]:
@@ -219,16 +233,19 @@ def run(config_path: Path, dry_run: bool = False) -> dict[str, Any]:
     picture_sets = list_picture_sets(pictures_dir)
 
     if dry_run:
-        return {
-            "dry_run": True,
-            "items": [
+        dry_run_items = []
+        for folder in picture_sets:
+            images = list_images(folder)
+            dry_run_items.append(
                 {
                     "item_folder": folder.name,
-                    "search_image": str(choose_search_image(list_images(folder), preferred_name)),
-                    "listing_images": [str(path) for path in list_images(folder)],
+                    "search_image": str(choose_search_image(images, preferred_name)),
+                    "listing_images": [str(path) for path in images],
                 }
-                for folder in picture_sets
-            ],
+            )
+        return {
+            "dry_run": True,
+            "items": dry_run_items,
         }
 
     client_id, client_secret = resolve_credentials(config)
